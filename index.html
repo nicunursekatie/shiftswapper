@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NICU Shift Swap Helper</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script>
+        // Initialize PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #0d6efd;
+            margin-bottom: 20px;
+        }
+        .step {
+            margin-bottom: 25px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f1f8ff;
+        }
+        .step-number {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            background-color: #0d6efd;
+            color: white;
+            text-align: center;
+            line-height: 30px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .result-container {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #f0f0f0;
+            display: none;
+        }
+        .yes-result {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .no-result {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .warn-result {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+        }
+        .calendar-container {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .shift-date {
+            background-color: #e9ecef;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .conflict-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin-top: 5px;
+            display: inline-block;
+        }
+        #scheduleData {
+            min-height: 100px;
+        }
+        .btn-primary {
+            background-color: #0d6efd;
+        }
+        .form-check {
+            margin-top: 10px;
+        }
+        .nav-tabs {
+            margin-bottom: 15px;
+        }
+        .tab-content {
+            padding: 15px 0;
+        }
+        .pdf-preview {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+        }
+        .file-upload-container {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+            transition: all 0.3s;
+        }
+        .file-upload-container:hover {
+            border-color: #0d6efd;
+            background-color: #f0f7ff;
+        }
+        .file-upload-icon {
+            font-size: 48px;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            display: none;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        .month-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+        .month-header {
+            background-color: #f1f8ff;
+            padding: 10px 15px;
+            font-weight: bold;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .month-body {
+            padding: 15px;
+        }
+        .schedule-summary {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>NICU Shift Swap Helper</h1>
+        
+        <div class="step">
+            <span class="step-number">1</span>
+            <strong>Enter Your Work Schedule</strong>
+            <div class="mt-3">
+                <ul class="nav nav-tabs" id="scheduleTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="pdf-tab" data-bs-toggle="tab" data-bs-target="#pdf-content" type="button" role="tab" aria-controls="pdf-content" aria-selected="true">Upload PDF Schedule</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="text-tab" data-bs-toggle="tab" data-bs-target="#text-content" type="button" role="tab" aria-controls="text-content" aria-selected="false">Paste Text</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-content" type="button" role="tab" aria-controls="manual-content" aria-selected="false">Manual Entry</button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content" id="scheduleTabContent">
+                    <!-- PDF Upload Option -->
+                    <div class="tab-pane fade show active" id="pdf-content" role="tabpanel" aria-labelledby="pdf-tab">
+                        <div class="file-upload-container" id="pdfDropZone">
+                            <div class="file-upload-icon">
+                                <i class="fas fa-file-pdf"></i>
+                            </div>
+                            <p>Drag & drop your Smart Square PDF schedules here</p>
+                            <p class="text-muted">or</p>
+                            <input type="file" id="pdfFileInput" class="d-none" accept=".pdf" multiple>
+                            <button class="btn btn-primary" id="browseFilesBtn">Browse Files</button>
+                            <p class="mt-2 text-muted">Upload multiple months if needed</p>
+                        </div>
+                        
+                        <div id="pdfUploadResults">
+                            <!-- PDF previews will be inserted here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Text Paste Option -->
+                    <div class="tab-pane fade" id="text-content" role="tabpanel" aria-labelledby="text-tab">
+                        <p class="mb-2">Paste your SmartSquare calendar data here:</p>
+                        <textarea id="scheduleData" class="form-control" rows="5" placeholder="Paste your entire Smart Square schedule here (copy all text from the calendar view)"></textarea>
+                        <button id="parseTextScheduleBtn" class="btn btn-primary mt-2">Parse Schedule</button>
+                    </div>
+                    
+                    <!-- Manual Entry Option -->
+                    <div class="tab-pane fade" id="manual-content" role="tabpanel" aria-labelledby="manual-tab">
+                        <p>Enter your shifts one per line in format: MM/DD/YYYY - shift type (e.g., 04/15/2025 - DAY)</p>
+                        <textarea id="manualSchedule" class="form-control" rows="5" placeholder="04/15/2025 - DAY 6:45a-7:15p"></textarea>
+                        <button id="parseManualScheduleBtn" class="btn btn-primary mt-2">Save Schedule</button>
+                    </div>
+                </div>
+                
+                <div id="scheduleOverview" class="mt-4" style="display: none;">
+                    <h5>📅 Your Schedule Overview</h5>
+                    <div id="scheduleMonths">
+                        <!-- Month cards will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="step">
+            <span class="step-number">2</span>
+            <strong>Connect Calendar (Optional)</strong>
+            <div class="mt-3">
+                <ul class="nav nav-tabs" id="calendarTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="cal-upload-tab" data-bs-toggle="tab" data-bs-target="#cal-upload-content" type="button" role="tab" aria-controls="cal-upload-content" aria-selected="true">Import Calendar</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="cal-manual-tab" data-bs-toggle="tab" data-bs-target="#cal-manual-content" type="button" role="tab" aria-controls="cal-manual-content" aria-selected="false">Manual Entry</button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content" id="calendarTabContent">
+                    <!-- Calendar Import Option -->
+                    <div class="tab-pane fade show active" id="cal-upload-content" role="tabpanel" aria-labelledby="cal-upload-tab">
+                        <div class="file-upload-container" id="calDropZone">
+                            <div class="file-upload-icon">
+                                <i class="fas fa-calendar-alt"></i>
+                            </div>
+                            <p>Import your personal calendar events (ICS file)</p>
+                            <input type="file" id="calendarFileInput" class="d-none" accept=".ics">
+                            <button class="btn btn-primary" id="browseCalendarBtn">Browse Files</button>
+                        </div>
+                        
+                        <div id="calendarImportResults" class="mt-3">
+                            <!-- Calendar import results will be shown here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Manual Entry Option -->
+                    <div class="tab-pane fade" id="cal-manual-content" role="tabpanel" aria-labelledby="cal-manual-tab">
+                        <p>Enter your events one per line in format: MM/DD/YYYY - event name (e.g., 04/15/2025 - Dinner)</p>
+                        <textarea id="manualEvents" class="form-control" rows="5" placeholder="04/15/2025 - Dinner with friends"></textarea>
+                        <button id="savePersonalEventsBtn" class="btn btn-primary mt-2">Save Events</button>
+                    </div>
+                </div>
+                
+                <div id="eventsOverview" class="mt-4" style="display: none;">
+                    <h5>📅 Your Personal Events</h5>
+                    <div id="eventsContainer" class="schedule-summary">
+                        <!-- Events will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="step">
+            <span class="step-number">3</span>
+            <strong>Analyze Swap Request</strong>
+            <div class="mt-3">
+                <p>Enter the swap request message from GroupMe:</p>
+                <textarea id="swapMessage" class="form-control" rows="3" placeholder="Example: 'Hey friends! Any day shifters able swap my 4/14 for 4/11, 4/13, or 4/16?'"></textarea>
+                
+                <div class="mt-3">
+                    <p class="mb-2">Or enter details manually:</p>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="theirShiftDate" class="form-label">Date they need covered:</label>
+                            <input type="date" id="theirShiftDate" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="offeredDates" class="form-label">Dates they offer to work:</label>
+                            <input type="text" id="offeredDates" class="form-control" placeholder="MM/DD,MM/DD,MM/DD">
+                            <small class="text-muted">Separate multiple dates with commas</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="analyzeBtn" class="btn btn-primary mt-3">Analyze Swap</button>
+            </div>
+        </div>
+        
+        <div id="resultContainer" class="result-container">
+            <h3 id="resultTitle">Analysis Result</h3>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM elements - Schedule
+            const pdfDropZone = document.getElementById('pdfDropZone');
+            const pdfFileInput = document.getElementById('pdfFileInput');
+            const browseFilesBtn = document.getElementById('browseFilesBtn');
+            const pdfUploadResults = document.getElementById('pdfUploadResults');
+            const scheduleDataInput = document.getElementById('scheduleData');
+            const parseTextScheduleBtn = document.getElementById('parseTextScheduleBtn');
+            const manualScheduleTextarea = document.getElementById('manualSchedule');
+            const parseManualScheduleBtn = document.getElementById('parseManualScheduleBtn');
+            const scheduleOverview = document.getElementById('scheduleOverview');
+            const scheduleMonths = document.getElementById('scheduleMonths');
+            
+            // DOM elements - Calendar
+            const calDropZone = document.getElementById('calDropZone');
+            const calendarFileInput = document.getElementById('calendarFileInput');
+            const browseCalendarBtn = document.getElementById('browseCalendarBtn');
+            const calendarImportResults = document.getElementById('calendarImportResults');
+            const manualEventsTextarea = document.getElementById('manualEvents');
+            const savePersonalEventsBtn = document.getElementById('savePersonalEventsBtn');
+            const eventsOverview = document.getElementById('eventsOverview');
+            const eventsContainer = document.getElementById('eventsContainer');
+            
+            // DOM elements - Analysis
+            const swapMessageInput = document.getElementById('swapMessage');
+            const theirShiftDateInput = document.getElementById('theirShiftDate');
+            const offeredDatesInput = document.getElementById('offeredDates');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const resultContainer = document.getElementById('resultContainer');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultContent = document.getElementById('resultContent');
+            const loadingOverlay = document.querySelector('.loading-overlay');
+            
+            // ShiftSwapAnalyzer class
+            class ShiftSwapAnalyzer {
+                constructor() {
+                    this.workSchedule = [];
+                    this.personalEvents = [];
+                }
+
+                // Consolidated and improved standardizeDate function
+                standardizeDate(dateStr) {
+                    try {
+                        if (typeof dateStr === 'string') {
+                            // If it's already in MM/DD/YYYY format
+                            if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+                                return dateStr;
+                            }
+
+                            // If it's in MM/DD format, add the current year
+                            if (/^\d{1,2}\/\d{1,2}$/.test(dateStr)) {
+                                const currentYear = new Date().getFullYear();
+                                return `${dateStr}/${currentYear}`;
+                            }
+                        }
+
+                        // If it's a Date object
+                        if (dateStr instanceof Date && !isNaN(dateStr)) {
+                            const month = dateStr.getMonth() + 1;
+                            const day = dateStr.getDate();
+                            const year = dateStr.getFullYear();
+                            return `${month}/${day}/${year}`;
+                        }
+
+                        throw new Error('Invalid date format');
+                    } catch (error) {
+                        console.error('Error in standardizeDate:', error);
+                        return null;
+                    }
+                }
+
+                // Improved isWorkDay function
+                isWorkDay(dateStr) {
+                    try {
+                        const standardDate = this.standardizeDate(dateStr);
+                        if (!standardDate || !this.workSchedule || !Array.isArray(this.workSchedule)) {
+                            return { isWorking: false };
+                        }
+
+                        for (const shift of this.workSchedule) {
+                            if (this.datesMatch(shift.date, standardDate) && shift.isWorking) {
+                                return {
+                                    isWorking: true,
+                                    timeRange: shift.timeRange,
+                                    details: shift.details,
+                                };
+                            }
+                        }
+
+                        return { isWorking: false };
+                    } catch (error) {
+                        console.error('Error in isWorkDay:', error);
+                        return { isWorking: false };
+                    }
+                }
+
+                // Improved datesMatch function
+                datesMatch(date1, date2) {
+                    try {
+                        if (typeof date1 !== 'string' || typeof date2 !== 'string') {
+                            return false;
+                        }
+
+                        const parts1 = date1.split('/');
+                        const parts2 = date2.split('/');
+
+                        if (parts1.length >= 2 && parts2.length >= 2) {
+                            if (
+                                parseInt(parts1[0]) === parseInt(parts2[0]) &&
+                                parseInt(parts1[1]) === parseInt(parts2[1])
+                            ) {
+                                if (parts1.length === 3 && parts2.length === 3) {
+                                    return parseInt(parts1[2]) === parseInt(parts2[2]);
+                                }
+                                return true; // Match on month and day
+                            }
+                        }
+
+                        return false;
+                    } catch (error) {
+                        console.error('Error in datesMatch:', error);
+                        return false;
+                    }
+                }
+
+                // Improved parseSwapMessage function
+                parseSwapMessage(message) {
+                    try {
+                        const datePattern = /\d{1,2}\/\d{1,2}(?:\/\d{4})?/g;
+                        const dates = message.match(datePattern);
+
+                        if (!dates || dates.length < 2) {
+                            throw new Error('Invalid swap message format');
+                        }
+
+                        const theirShiftDate = dates[0];
+                        const offeredDates = dates.slice(1);
+
+                        return {
+                            theirShiftDate,
+                            offeredDates,
+                        };
+                    } catch (error) {
+                        console.error('Error in parseSwapMessage:', error);
+                        return null;
+                    }
+                }
+
+                // Improved analyzeSwapRequest function
+                analyzeSwapRequest(theirShiftDate, offeredDates) {
+                    try {
+                        if (!Array.isArray(offeredDates) || offeredDates.length === 0) {
+                            throw new Error('No valid offered dates provided');
+                        }
+
+                        const theirShiftStatus = this.isWorkDay(theirShiftDate);
+                        if (theirShiftStatus.isWorking) {
+                            return {
+                                possible: false,
+                                reason: `You're already scheduled to work on ${theirShiftDate}`,
+                            };
+                        }
+
+                        const personalEventCheck = this.hasPersonalEvents(theirShiftDate);
+                        const possibleDates = offeredDates
+                            .map((date) => {
+                                const workStatus = this.isWorkDay(date);
+                                const personalStatus = this.hasPersonalEvents(date);
+
+                                if (workStatus.isWorking) {
+                                    return {
+                                        date,
+                                        shiftDetails: workStatus,
+                                        personalEvents: personalStatus.events,
+                                        hasConflict: personalStatus.hasEvents,
+                                    };
+                                }
+                                return null;
+                            })
+                            .filter(Boolean);
+
+                        if (possibleDates.length === 0) {
+                            return {
+                                possible: false,
+                                reason: "You're not scheduled to work on any of the offered dates",
+                            };
+                        }
+
+                        return {
+                            possible: true,
+                            availableForTheirShift: !personalEventCheck.hasEvents,
+                            theirShiftDate,
+                            theirShiftPersonalEvents: personalEventCheck.events,
+                            possibleDates,
+                        };
+                    } catch (error) {
+                        console.error('Error in analyzeSwapRequest:', error);
+                        return {
+                            possible: false,
+                            reason: 'An error occurred while analyzing the swap request',
+                        };
+                    }
+                }
+
+                // Check if a date has personal events
+                hasPersonalEvents(dateStr) {
+                    const standardDate = this.standardizeDate(dateStr);
+                    
+                    const eventsOnDay = this.personalEvents.filter(event => 
+                        this.datesMatch(event.date, standardDate)
+                    );
+                    
+                    return {
+                        hasEvents: eventsOnDay.length > 0,
+                        events: eventsOnDay
+                    };
+                }
+            }
+            
+            // Initialize the analyzer
+            const analyzer = new ShiftSwapAnalyzer();
+            
+            // Handle analyze button click
+            analyzeBtn.addEventListener('click', function() {
+                let scheduleParseSuccess = false;
+                
+                // Parse schedule data
+                if (useManualScheduleCheckbox.checked) {
+                    scheduleParseSuccess = analyzer.parseManualSchedule(manualScheduleTextarea.value);
+                } else {
+                    scheduleParseSuccess = analyzer.parseSmartSquareData(scheduleDataInput.value);
+                }
+                
+                if (!scheduleParseSuccess) {
+                    alert('Failed to parse schedule data. Please check the format and try again.');
+                    return;
+                }
+                
+                // Parse personal events if provided
+                if (useManualEventsCheckbox.checked && manualEventsTextarea.value.trim() !== '') {
+                    analyzer.parseManualEvents(manualEventsTextarea.value);
+                }
+                
+                // Get swap request details
+                let theirShiftDate, offeredDates;
+                
+                if (swapMessageInput.value.trim() !== '') {
+                    // Parse from message
+                    const swapRequest = analyzer.parseSwapMessage(swapMessageInput.value);
+                    if (swapRequest) {
+                        theirShiftDate = swapRequest.theirShiftDate;
+                        offeredDates = swapRequest.offeredDates;
+                    } else {
+                        alert('Could not parse the swap request message. Please enter details manually.');
+                        return;
+                    }
+                } else if (theirShiftDateInput.value && offeredDatesInput.value) {
+                    // Get from manual inputs
+                    theirShiftDate = formatDateInput(theirShiftDateInput.value);
+                    offeredDates = offeredDatesInput.value.split(',').map(d => d.trim());
+                } else {
+                    alert('Please enter either a swap message or the swap details manually.');
+                    return;
+                }
+                
+                // Analyze the swap request
+                const analysis = analyzer.analyzeSwapRequest(theirShiftDate, offeredDates);
+                
+                // Display results
+                displayResults(analysis);
+            });
+            
+            // Format date input to MM/DD/YYYY
+            function formatDateInput(dateStr) {
+                try {
+                    const date = new Date(dateStr);
+                    return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+                } catch (error) {
+                    return dateStr;
+                }
+            }
+            
+            // Display analysis results
+            function displayResults(analysis) {
+                resultContainer.style.display = 'block';
+                
+                if (!analysis.possible) {
+                    resultContainer.className = 'result-container no-result';
+                    resultTitle.textContent = 'Swap Not Possible';
+                    resultContent.innerHTML = `<p><strong>Reason:</strong> ${analysis.reason}</p>`;
+                    return;
+                }
+                
+                // Swap is possible
+                if (analysis.availableForTheirShift) {
+                    resultContainer.className = 'result-container yes-result';
+                    resultTitle.textContent = 'Swap Possible!';
+                } else {
+                    resultContainer.className = 'result-container warn-result';
+                    resultTitle.textContent = 'Swap Possible (with conflicts)';
+                }
+                
+                let html = `<p>You can work their shift on <strong>${analysis.theirShiftDate}</strong>`;
+                
+                if (!analysis.availableForTheirShift) {
+                    html += ', but you have these personal events:';
+                    html += '<ul>';
+                    analysis.theirShiftPersonalEvents.forEach(event => {
+                        html += `<li>${event.title}</li>`;
+                    });
+                    html += '</ul>';
+                } else {
+                    html += ' with no personal conflicts.';
+                }
+                
+                html += '</p>';
+                
+                html += '<p><strong>They can work one of your shifts on:</strong></p>';
+                html += '<ul>';
+                
+                analysis.possibleDates.forEach(date => {
+                    html += `<li><div class="shift-date"><strong>${date.date}</strong> - ${date.shiftDetails.details || date.shiftDetails.timeRange}`;
+                    
+                    if (date.hasConflict) {
+                        html += '<div class="conflict-warning"><i class="bi bi-exclamation-triangle"></i> Note: You have personal events on this day</div>';
+                    }
+                    
+                    html += '</div></li>';
+                });
+                
+                html += '</ul>';
+                
+                resultContent.innerHTML = html;
+            }
+        });
+    </script>
+</body>
+</html>
